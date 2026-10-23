@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PPV and NPV by Prevalence</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1d2330; --muted: #5d6677; --card: #f4f6fa;
+    --border: #d7dce6; --ppv: #c2410c; --npv: #1d4ed8; --accent: #0f766e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c; --fg: #e8ebf2; --muted: #9aa3b5; --card: #1b202b;
+      --border: #2d3445; --ppv: #fb923c; --npv: #60a5fa; --accent: #2dd4bf;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 140px; }
+  input[type=number] {
+    width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--fg); font-size: 1rem;
+  }
+  .big { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat { flex: 1 1 160px; text-align: center; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); }
+  .stat .v { font-size: 2rem; font-weight: 700; }
+  .stat .k { color: var(--muted); font-size: .85rem; }
+  .ppv { color: var(--ppv); } .npv { color: var(--npv); }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { fill: var(--muted); font-size: 12px; }
+  svg .axis { stroke: var(--border); }
+  svg .grid { stroke: var(--border); stroke-dasharray: 2 4; opacity: .7; }
+  table { width: 100%; border-collapse: collapse; text-align: center; }
+  th, td { border: 1px solid var(--border); padding: 8px; }
+  th { background: var(--bg); font-weight: 600; }
+  .note { color: var(--muted); font-size: .85rem; }
+  button {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--fg); cursor: pointer; font-size: .9rem;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>PPV and NPV by Prevalence</h1>
+  <p class="sub">Explore how the predictive values of the risk model change with disease prevalence, at the Youden-optimal cutoff.</p>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="sens">Sensitivity</label>
+        <input id="sens" type="number" min="0.01" max="1" step="0.01" value="0.85">
+      </div>
+      <div>
+        <label for="spec">Specificity</label>
+        <input id="spec" type="number" min="0.01" max="1" step="0.01" value="0.93">
+      </div>
+      <div>
+        <label for="cohort">Study cohort prevalence (%)</label>
+        <input id="cohort" type="number" min="0.1" max="50" step="0.1" value="14">
+      </div>
+    </div>
+    <p class="note" style="margin:10px 0 0">Defaults are the observed estimates from the study. Change them to explore other scenarios.</p>
+  </div>
+
+  <div class="card">
+    <label for="prev">Prevalence: <span id="prevLabel">14.0%</span></label>
+    <input id="prev" type="range" min="0.5" max="50" step="0.5" value="14">
+    <div style="margin-top:8px">
+      <button type="button" id="resetBtn">Reset to cohort prevalence</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="big">
+      <div class="stat"><div class="v ppv" id="ppvOut">-</div><div class="k">Positive predictive value</div></div>
+      <div class="stat"><div class="v npv" id="npvOut">-</div><div class="k">Negative predictive value</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <svg id="plot" viewBox="0 0 680 380" role="img" aria-label="PPV and NPV plotted against prevalence"></svg>
+  </div>
+
+  <div class="card">
+    <strong>Per 1,000 children</strong>
+    <table style="margin-top:10px">
+      <thead>
+        <tr><th></th><th>Develop disease</th><th>Do not develop disease</th><th>Total</th></tr>
+      </thead>
+      <tbody>
+        <tr><th>Flagged high risk</th><td id="tp">-</td><td id="fp">-</td><td id="pos">-</td></tr>
+        <tr><th>Labelled low risk</th><td id="fn">-</td><td id="tn">-</td><td id="neg">-</td></tr>
+        <tr><th>Total</th><td id="cases">-</td><td id="noncases">-</td><td>1000</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="note">
+    This tool is illustrative. It applies the sensitivity and specificity observed at the Youden-optimal cutoff to an assumed prevalence
+    and does not include confidence intervals. The cutoff was chosen in the same data, so estimates may be optimistic and require
+    external validation. PPV and NPV apply only to populations resembling the one in which the assumed prevalence holds.
+  </p>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var W = 680, H = 380, M = { l: 52, r: 20, t: 16, b: 46 };
+  var xMax = 50;
+
+  function ppv(se, sp, p) { var d = se * p + (1 - sp) * (1 - p); return d > 0 ? se * p / d : NaN; }
+  function npv(se, sp, p) { var d = sp * (1 - p) + (1 - se) * p; return d > 0 ? sp * (1 - p) / d : NaN; }
+  function pct(x) { return isNaN(x) ? "-" : (x * 100).toFixed(1) + "%"; }
+  function clamp(v, lo, hi, dflt) { v = parseFloat(v); if (isNaN(v)) return dflt; return Math.min(hi, Math.max(lo, v)); }
+  function sx(p) { return M.l + (p / xMax) * (W - M.l - M.r); }
+  function sy(v) { return H - M.b - v * (H - M.t - M.b); }
+
+  function line(se, sp, fn) {
+    var pts = [];
+    for (var x = 0.5; x <= xMax + 1e-9; x += 0.5) {
+      var v = fn(se, sp, x / 100);
+      if (!isNaN(v)) pts.push(sx(x).toFixed(1) + "," + sy(v).toFixed(1));
+    }
+    return pts.join(" ");
+  }
+
+  function draw() {
+    var se = clamp($("sens").value, 0.01, 1, 0.85);
+    var sp = clamp($("spec").value, 0.01, 1, 0.93);
+    var cohort = clamp($("cohort").value, 0.1, 50, 14);
+    var p = parseFloat($("prev").value);
+    $("prevLabel").textContent = p.toFixed(1) + "%";
+
+    var pp = ppv(se, sp, p / 100), nn = npv(se, sp, p / 100);
+    $("ppvOut").textContent = pct(pp);
+    $("npvOut").textContent = pct(nn);
+
+    var n = 1000, cases = n * p / 100, non = n - cases;
+    var tp = cases * se, fn = cases - tp, tn = non * sp, fp = non - tn;
+    var r = function (v) { return Math.round(v); };
+    $("tp").textContent = r(tp); $("fp").textContent = r(fp); $("pos").textContent = r(tp + fp);
+    $("fn").textContent = r(fn); $("tn").textContent = r(tn); $("neg").textContent = r(fn + tn);
+    $("cases").textContent = r(cases); $("noncases").textContent = r(non);
+
+    var s = "";
+    for (var i = 0; i <= 5; i++) {
+      var v = i / 5, y = sy(v);
+      s += '<line class="grid" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + y + '" y2="' + y + '"/>';
+      s += '<text x="' + (M.l - 8) + '" y="' + (y + 4) + '" text-anchor="end">' + Math.round(v * 100) + '%</text>';
+    }
+    for (var x = 0; x <= xMax; x += 10) {
+      s += '<text x="' + sx(x) + '" y="' + (H - M.b + 18) + '" text-anchor="middle">' + x + '%</text>';
+    }
+    s += '<line class="axis" x1="' + M.l + '" x2="' + (W - M.r) + '" y1="' + sy(0) + '" y2="' + sy(0) + '"/>';
+    s += '<line class="axis" x1="' + M.l + '" x2="' + M.l + '" y1="' + sy(0) + '" y2="' + sy(1) + '"/>';
+    s += '<text x="' + ((M.l + W - M.r) / 2) + '" y="' + (H - 8) + '" text-anchor="middle">Prevalence</text>';
+    s += '<text transform="translate(14,' + ((M.t + H - M.b) / 2) + ') rotate(-90)" text-anchor="middle">Predictive value</text>';
+
+    // cohort marker
+    s += '<line x1="' + sx(cohort) + '" x2="' + sx(cohort) + '" y1="' + sy(0) + '" y2="' + sy(1) +
+         '" stroke="currentColor" stroke-dasharray="4 4" opacity=".4"/>';
+    s += '<text x="' + (sx(cohort) + 4) + '" y="' + (M.t + 12) + '">Study cohort (' + cohort + '%)</text>';
+
+    // curves
+    s += '<polyline fill="none" stroke="var(--ppv)" stroke-width="2.5" points="' + line(se, sp, ppv) + '"/>';
+    s += '<polyline fill="none" stroke="var(--npv)" stroke-width="2.5" points="' + line(se, sp, npv) + '"/>';
+
+    // current points
+    if (!isNaN(pp)) s += '<circle cx="' + sx(p) + '" cy="' + sy(pp) + '" r="6" fill="var(--ppv)" stroke="var(--bg)" stroke-width="2"/>';
+    if (!isNaN(nn)) s += '<circle cx="' + sx(p) + '" cy="' + sy(nn) + '" r="6" fill="var(--npv)" stroke="var(--bg)" stroke-width="2"/>';
+
+    // legend
+    s += '<rect x="' + (W - 150) + '" y="' + (sy(0) - 62) + '" width="12" height="3" fill="var(--ppv)"/>';
+    s += '<text x="' + (W - 132) + '" y="' + (sy(0) - 56) + '">PPV</text>';
+    s += '<rect x="' + (W - 90) + '" y="' + (sy(0) - 62) + '" width="12" height="3" fill="var(--npv)"/>';
+    s += '<text x="' + (W - 72) + '" y="' + (sy(0) - 56) + '">NPV</text>';
+
+    $("plot").innerHTML = s;
+  }
+
+  ["sens", "spec", "cohort", "prev"].forEach(function (id) { $(id).addEventListener("input", draw); });
+  $("resetBtn").addEventListener("click", function () {
+    $("prev").value = clamp($("cohort").value, 0.5, 50, 14);
+    draw();
+  });
+  draw();
+})();
+</script>
+</body>
+</html>
